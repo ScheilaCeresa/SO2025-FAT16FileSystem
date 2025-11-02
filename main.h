@@ -5,7 +5,7 @@
 
 using namespace std;
 
-
+#pragma pack(push, 1)
 struct BootSector {
     uint8_t  jumpInstruction[3]; // 00 |3|
     char     OEMName[8]; // 03 |8|
@@ -23,7 +23,9 @@ struct BootSector {
     uint32_t totalSectors32; // Alas largeNumberOfSectors 20 |4|
     // Source: http://www.maverick-os.dk/FileSystemFormats/FAT16_FileSystem.html
 };
+#pragma pack(pop)
 
+#pragma pack(push, 1)
 struct DirectoryEntry {
     char     name[11]; // 00 |8| + 08 |3|
     uint8_t  attr; // 0B |1|
@@ -39,6 +41,7 @@ struct DirectoryEntry {
     uint32_t fileSize; // 1C |4|
     // Source: http://www.maverick-os.dk/FileSystemFormats/FAT16_FileSystem.html
 };
+#pragma pack(pop)
 
 bool readBootSector(ifstream& img, BootSector& boot);
 void printBootInfo(const BootSector& boot);

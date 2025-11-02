@@ -31,7 +31,7 @@ Cada uma das operações será avaliada de acordo com a sua corretude: As opera�
 
 * Listar o conteúdo do disco		10% (X)
 * Listar o conteúdo de um arquivo 	10% ()
-* Exibir os atributos de um arquivo	10% ()
+* Exibir os atributos de um arquivo	10% (X)
 * Renomear um arquivo		10%         ()
 * Apagar/remover um arquivo		20%     ()
 * Inserir/criar um novo arquivo	40%     ()	 

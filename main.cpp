@@ -61,9 +61,10 @@ int main (){
 
 // functions
 bool readBootSector(ifstream& disk, BootSector& boot) {
+    if (!disk.is_open()) return false;
     disk.seekg(0, ios::beg);
     disk.read(reinterpret_cast<char*>(&boot), sizeof(BootSector));
-    return !disk.fail();
+    return disk.good();
 }
 
 void printBootInfo(const BootSector& boot) {
@@ -81,6 +82,15 @@ void printBootInfo(const BootSector& boot) {
 }
 
 void listRootDirectory(ifstream& disk, const BootSector& boot) {
+    auto trim = [](string s) {
+        size_t end = s.find_last_not_of(' ');
+        if (end != string::npos)
+            s.erase(end + 1);
+        else
+            s.clear();
+        return s;
+    };
+
     streamoff rootDirectoryOffset = (boot.reservedSectors + boot.numFATs * boot.FATSize) * boot.bytesPerSector;
     int rootDirectorySize = boot.rootEntries * sizeof(DirectoryEntry);
 
@@ -95,10 +105,8 @@ void listRootDirectory(ifstream& disk, const BootSector& boot) {
         if ((uint8_t)entry.name[0] == 0xE5) continue; // deletado
 
         if (!(entry.attr & 0x08) && !(entry.attr & 0x10)) { // ignora volume label e subdiretorio
-            string name(entry.name, entry.name + 8);
-            string extension(entry.name + 8, entry.name + 11);
-            name.erase(name.find_last_not_of(' ') + 1);
-            extension.erase(extension.find_last_not_of(' ') + 1);
+            string name = trim(string(entry.name, entry.name + 8));
+            string extension = trim(string(entry.name + 8, entry.name + 11));
 
             cout << name;
             if (!extension.empty()) cout << "." << extension;
@@ -185,6 +193,7 @@ void printFileAttributes(const DirectoryEntry& entry) {
     if (entry.attr & 0x01) cout << "[Somente leitura] ";
     if (entry.attr & 0x02) cout << "[Oculto] ";
     if (entry.attr & 0x04) cout << "[Sistema] ";
+    if ((entry.attr & 0x3F) == 0) cout << "[Arquivo normal] ";
     cout << endl;
 }
 
