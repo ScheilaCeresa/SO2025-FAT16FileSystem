@@ -25,23 +25,28 @@ struct BootSector {
 };
 
 struct DirectoryEntry {
-    char     name[11];
-    uint8_t  attr;
-    uint8_t  reserved;
-    uint8_t  createTimeTenths;
-    uint16_t createTime;
-    uint16_t createDate;
-    uint16_t lastAccessDate;
-    uint16_t clusterHigh;
-    uint16_t lastWriteTime;
-    uint16_t lastWriteDate;
-    uint16_t firstCluster;
-    uint32_t fileSize;
+    char     name[11]; // 00 |8| + 08 |3|
+    uint8_t  attr; // 0B |1|
+    uint8_t  reserved; // 0C |1|
+    uint8_t  createTimeTenths; // 0D |1|
+    uint16_t createTime; // 0E |2|
+    uint16_t createDate; // 10 |2|
+    uint16_t lastAccessDate; // 12 |2|
+    uint16_t clusterHigh; // 14 |2|
+    uint16_t lastWriteTime; // 16 |2|
+    uint16_t lastWriteDate; // 18 |2|
+    uint16_t firstCluster; // 1A |2|
+    uint32_t fileSize; // 1C |4|
+    // Source: http://www.maverick-os.dk/FileSystemFormats/FAT16_FileSystem.html
 };
 
 bool readBootSector(ifstream& img, BootSector& boot);
 void printBootInfo(const BootSector& boot);
 void listRootDirectory(ifstream& disk, const BootSector& boot);
+bool readFat16Name(char name[11]);
+unsigned int findFile(ifstream& disk, const BootSector& boot);
+void printFileAttributes(const DirectoryEntry& entry);
+void listAttributes(ifstream& disk, const BootSector& boot);
 void evokeMenu();
 
 #endif //SO2025_FAT16FILESYSTEM_MAIN_H

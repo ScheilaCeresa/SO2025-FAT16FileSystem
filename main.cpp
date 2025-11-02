@@ -1,8 +1,11 @@
 #include "main.h"
 
+#include <algorithm>
+#include <cstring>
 #include <fstream>
 #include <iostream>
 #include <vector>
+#include <tuple>
 
 using namespace  std;
 
@@ -33,6 +36,7 @@ int main (){
             case 2:
                 break;
             case 3:
+                listAttributes(fat16DISK,bootSector);
                 break;
             case 4:
                 break;
@@ -103,6 +107,105 @@ void listRootDirectory(ifstream& disk, const BootSector& boot) {
     }
 }
 
+bool readFat16Name(char name[11]) {
+    string input;
+    cout << "Digite o nome do arquivo (ex: ARQUIVO.TXT): ";
+    cin.ignore();
+    getline(cin, input);
+
+    input.erase(0, input.find_first_not_of(" \t"));
+    input.erase(input.find_last_not_of(" \t") + 1);
+
+    transform(input.begin(), input.end(), input.begin(), ::toupper);
+
+    size_t dotPos = input.find('.');
+    string nome = (dotPos == string::npos) ? input : input.substr(0, dotPos);
+    string ext  = (dotPos == string::npos) ? ""    : input.substr(dotPos + 1);
+
+    if (nome.empty() || nome.length() > 8 || ext.length() > 3) {
+        cout << "Erro: formato invalido (use o padrao 8.3)" << endl;
+        return false;
+    }
+
+    memset(name, ' ', 11);
+    memcpy(name, nome.c_str(), nome.length());
+    memcpy(name + 8, ext.c_str(), ext.length());
+
+    return true;
+}
+
+unsigned int findFile(ifstream& disk, const BootSector& boot, const char* name) {
+    streamoff rootDirectoryOffset = (boot.reservedSectors + boot.numFATs * boot.FATSize) * boot.bytesPerSector;
+    int rootDirectorySize = boot.rootEntries * sizeof(DirectoryEntry);
+
+    disk.seekg(rootDirectoryOffset, ios::beg);
+
+    vector<DirectoryEntry> entries(boot.rootEntries);
+    disk.read(reinterpret_cast<char*>(entries.data()), rootDirectorySize);
+
+    unsigned int entryNumber = 0;
+    for (const auto& entry : entries) {
+        entryNumber++;
+        if (entry.name[0] == 0x00) {
+            entryNumber = 0;
+            break;
+        }
+        if ((uint8_t)entry.name[0] == 0xE5 || (entry.attr & 0x08) || (entry.attr & 0x10)) continue;
+        if (memcmp(entry.name,name,11) == 0) break;
+    }
+    return entryNumber;
+}
+
+void printFileAttributes(const DirectoryEntry& entry) {
+    auto decodeDate = [](uint16_t date) {
+        int day = date & 0x1F;             // bits 0-4
+        int month = (date >> 5) & 0x0F;    // bits 5-8
+        int year = ((date >> 9) & 0x7F) + 1980; // bits 9-15
+        return make_tuple(year, month, day);
+    };
+
+    auto decodeTime = [](uint16_t time) {
+        int second = (time & 0x1F) * 2;         // bits 0-4
+        int minute = (time >> 5) & 0x3F;        // bits 5-10
+        int hour = (time >> 11) & 0x1F;         // bits 11-15
+        return make_tuple(hour, minute, second);
+    };
+
+    auto [cYear, cMonth, cDay] = decodeDate(entry.createDate);
+    auto [cHour, cMinute, cSecond] = decodeTime(entry.createTime);
+    cout << "Criado em: " << cYear << "/" << cMonth << "/" << cDay
+              << " " << cHour << ":" << cMinute << ":" << cSecond << endl;
+
+    auto [mYear, mMonth, mDay] = decodeDate(entry.lastWriteDate);
+    auto [mHour, mMinute, mSecond] = decodeTime(entry.lastWriteTime);
+    cout << "Ultima modificacao: " << mYear << "/" << mMonth << "/" << mDay
+              << " " << mHour << ":" << mMinute << ":" << mSecond << endl;
+
+    cout << "Atributos: ";
+    if (entry.attr & 0x01) cout << "[Somente leitura] ";
+    if (entry.attr & 0x02) cout << "[Oculto] ";
+    if (entry.attr & 0x04) cout << "[Sistema] ";
+    cout << endl;
+}
+
+void listAttributes(ifstream& disk, const BootSector& boot) {
+    char name[11];
+    if (!readFat16Name(name)) {
+        return;
+    }
+
+    unsigned int filePosition = findFile(disk, boot, name);
+    if (filePosition == 0) {
+        cout << "Arquivo nao encontrado" << endl;
+        return;
+    }
+    streamoff rootDirectoryOffset = (boot.reservedSectors + boot.numFATs * boot.FATSize) * boot.bytesPerSector;
+    disk.seekg(rootDirectoryOffset + (filePosition -1) * sizeof(DirectoryEntry), ios::beg);
+
+    DirectoryEntry entry;
+    disk.read(reinterpret_cast<char*>(&entry), sizeof(DirectoryEntry));
+    printFileAttributes(entry);
+}
 void evokeMenu() {
     cout << endl << "Menu" << endl;
     cout << "1 - Listar o conteudo do disco" << endl;
