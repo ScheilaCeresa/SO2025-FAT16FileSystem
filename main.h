@@ -53,6 +53,8 @@ void listAttributes(ifstream& disk, const BootSector& boot);
 void evokeMenu();
 void listFileContent(ifstream& disk, const BootSector& boot);
 void renameFile(const string& imagePath, const BootSector& boot);
+void deleteFile(const std::string& imagePath, const BootSector& boot);
+
 
 //função pra calcular 
 uint64_t calcRootDirOffset(const BootSector& boot);

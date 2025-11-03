@@ -7,8 +7,14 @@
 #include <vector>
 #include <tuple>
 #include <limits>
+#include <filesystem>
+#include <filesystem>
+#include <chrono>
+#include <ctime>
 
-using namespace  std;
+namespace fs = std::filesystem;
+
+using namespace std;
 
 int main (){
 
@@ -52,6 +58,7 @@ int main (){
                 renameFile(path, bootSector);
                 break;
             case 5:
+                deleteFile(path, bootSector);
                 break;
             case 6:
                 break;
@@ -301,6 +308,13 @@ void listAttributes(ifstream& disk, const BootSector& boot) {
     DirectoryEntry entry;
     disk.read(reinterpret_cast<char*>(&entry), sizeof(DirectoryEntry));
     printFileAttributes(entry);
+
+    cout << "[DEBUG] createTime raw: 0x" << std::hex << entry.createTime 
+    << " createDate raw: 0x" << entry.createDate << std::dec << "\n";
+    cout << "[DEBUG] lastWriteTime raw: 0x" << std::hex << entry.lastWriteTime
+    << " lastWriteDate raw: 0x" << entry.lastWriteDate << std::dec << "\n";
+
+
 }
 
 void renameFile(const string& imagePath, const BootSector& boot) {
@@ -346,6 +360,112 @@ void renameFile(const string& imagePath, const BootSector& boot) {
 
     cout << "Renomeado com sucesso.\n";
     disk.close();
+    img.close();
+}
+
+
+void deleteFile(const string& imagePath, const BootSector& boot) {
+    try {
+        fs::path p(imagePath);
+        if (!fs::exists(p)) {
+            cout << "Arquivo de imagem nao existe: " << imagePath << "\n";
+            return;
+        }
+
+        auto t = std::chrono::system_clock::now();
+        std::time_t tt = std::chrono::system_clock::to_time_t(t);
+        std::tm tm_struct;
+        std::tm* tm_ptr = std::localtime(&tt);
+        if (tm_ptr) tm_struct = *tm_ptr;
+        else std::memset(&tm_struct, 0, sizeof(tm_struct));
+
+        char buf[32];
+        std::strftime(buf, sizeof(buf), "%Y%m%d_%H%M%S", &tm_struct);
+        fs::path backup = p.parent_path() / (p.stem().string() + std::string("_") + buf + p.extension().string());
+        fs::copy_file(p, backup, fs::copy_options::skip_existing);
+        cout << "Backup criado: " << backup.string() << "\n";
+    } catch (const std::filesystem::filesystem_error& e) {
+        cerr << "Erro ao criar backup: " << e.what() << "\n";
+    }
+
+    fstream img(imagePath, ios::in | ios::out | ios::binary);
+    if (!img.is_open()) {
+        cout << "Erro ao abrir imagem para exclusao\n";
+        return;
+    }
+
+    char name[11];
+    cout << "Nome do arquivo a apagar:\n";
+    if (!readFat16Name(name)) { img.close(); return; }
+
+    uint64_t rootOffset = calcRootDirOffset(boot);
+    size_t dirSize = size_t(boot.rootEntries) * sizeof(DirectoryEntry);
+    vector<DirectoryEntry> entries(boot.rootEntries);
+
+    img.seekg(rootOffset, ios::beg);
+    img.read(reinterpret_cast<char*>(entries.data()), dirSize);
+    if (!img) {
+        cerr << "Erro ao ler diretorio raiz\n";
+        img.close();
+        return;
+    }
+
+    int foundIndex = -1;
+    for (size_t i = 0; i < entries.size(); ++i) {
+        const DirectoryEntry& e = entries[i];
+        if (e.name[0] == 0x00) break;
+        if ((uint8_t)e.name[0] == 0xE5) continue;
+        if ((e.attr & 0x08) || (e.attr & 0x10)) continue;
+        if (memcmp(e.name, name, 11) == 0) { foundIndex = (int)i; break; }
+    }
+
+    if (foundIndex < 0) {
+        cout << "Arquivo nao encontrado\n";
+        img.close();
+        return;
+    }
+
+    DirectoryEntry entry = entries[foundIndex];
+    uint16_t cluster = entry.firstCluster;
+
+    if (cluster >= 0x0002 && cluster < 0xFFF8) {
+        while (true) {
+            uint64_t firstFATBase = uint64_t(boot.reservedSectors) * boot.bytesPerSector;
+            uint64_t fatEntryOffset = firstFATBase + uint64_t(cluster) * 2;
+
+            uint16_t nextCluster = 0;
+            img.seekg(fatEntryOffset, ios::beg);
+            img.read(reinterpret_cast<char*>(&nextCluster), sizeof(nextCluster));
+            if (!img) {
+                cerr << "Erro ao ler FAT (offset " << fatEntryOffset << ")\n";
+                break;
+            }
+
+            for (uint8_t fatIdx = 0; fatIdx < boot.numFATs; ++fatIdx) {
+                uint64_t fatBase = uint64_t(boot.reservedSectors) * boot.bytesPerSector
+                                 + uint64_t(fatIdx) * boot.FATSize * boot.bytesPerSector;
+                uint64_t thisEntry = fatBase + uint64_t(cluster) * 2;
+                uint16_t zero = 0x0000;
+                img.seekp(thisEntry, ios::beg);
+                img.write(reinterpret_cast<char*>(&zero), sizeof(zero));
+                if (!img) {
+                    cerr << "Erro ao escrever na FAT copia " << int(fatIdx) << " (offset " << thisEntry << ")\n";
+                }
+            }
+            img.flush();
+
+            if (nextCluster >= 0xFFF8 || nextCluster == 0x0000 || nextCluster == 0xFFFF) break;
+            cluster = nextCluster;
+        }
+    }
+
+    uint64_t entryOffset = rootOffset + uint64_t(foundIndex) * sizeof(DirectoryEntry);
+    unsigned char del = 0xE5;
+    img.seekp(entryOffset, ios::beg);
+    img.write(reinterpret_cast<char*>(&del), 1);
+    img.flush();
+
+    cout << "Arquivo removido (marcado como deletado) e clusters liberados.\n";
     img.close();
 }
 

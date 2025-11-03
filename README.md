@@ -30,8 +30,8 @@ Cada uma das operações será avaliada de acordo com a sua corretude: As opera�
 # Objetivos:
 
 * Listar o conteúdo do disco		10% (X)
-* Listar o conteúdo de um arquivo 	10% ()
+* Listar o conteúdo de um arquivo 	10% (X)
 * Exibir os atributos de um arquivo	10% (X)
-* Renomear um arquivo		10%         ()
+* Renomear um arquivo		10%         (X)
 * Apagar/remover um arquivo		20%     ()
 * Inserir/criar um novo arquivo	40%     ()	 
